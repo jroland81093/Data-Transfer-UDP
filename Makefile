@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS=-I.
-DEPS = # header file 
+DEPS=utils.c
 
 all: Sender Receiver
 

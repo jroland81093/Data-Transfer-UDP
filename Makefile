@@ -2,15 +2,15 @@ CC=gcc
 CFLAGS=-I.
 DEPS=utils.c
 
-all: Sender Receiver
+all: sender receiver
 
 %.o: %.c $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS)
 
-Sender: sender.o
+sender: sender.o
 	$(CC) -o $@ $^ $(CFLAGS)
 
-Receiver: receiver.o
+receiver: receiver.o
 	$(CC) -o $@ $^ $(CFLAGS)
 
 

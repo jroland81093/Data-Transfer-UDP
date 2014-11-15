@@ -1,48 +1,101 @@
 #include <stdio.h>
 #include <sys/types.h>   // definitions of a number of data types used in socket.h and netinet/in.h
 #include <sys/socket.h>  // definitions of structures needed for sockets, e.g. sockaddr
+#include <sys/time.h>
+#include <unistd.h>
 #include <netinet/in.h>  // constants and structures needed for internet domain addresses, e.g. sockaddr_in
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
-const int PACKETSIZE = 1000;
+/* PACKET DEFINITION */
+//Total Packet Size = 1000 Bytes
+//Packet Header Size = 100 Bytes
+//Payload Size = 900 Bytes
 
-const int TYP_START = 0;
-const int SEQ_START = 4;
-const int CHK_START = 8;
-const int SIP_START = 12;
-const int SPT_START = 16;
-const int NAM_START = 20;
-/*
-A packet consists of 
-  1) Header (100 bytes)
-      Data/ACK(bool): 
-        Byte 0
-        1 if Data, 0 if ACK
+#define WINDOWSIZE 10
+#define ACK 1
+#define DATA 0
+#define NAMESTART 16
+#define NAMESIZE 84
+#define LOADSIZE 900
+#define PLOSS .25  //Probability of packet loss
+#define PCORR .10  //Probability of packet corruption
 
-      Sequence Number(int): 
-        Byte 4-7
-        Denotes the sequence number being sent or received
+struct Packet {
+  unsigned int type; 
+  //0 for Data (Sender sends this), 1 for ACK (Receiver sends this.)
 
-      Checksum(int):
-        Byte 8-11
-        Helps check for errors in the payload.
+  unsigned int seqSize; 
+  //Denotes the total number of packets the file should be.
 
-      SourceIP(int): Denotes sender of the packet.
-        Byte 12-15
+  unsigned int seqNumber; 
+  //Sequence number of ACK or Data. 0 = Newfile.
 
-      SourcePort(int): Denotes port which sent from.
-        Byte 16-19
+  int checkSum; 
+  //Supposed value
 
-      Name (string): Name of file requested.
-        Byte 20-99
+  char name [NAMESIZE]; 
+  //Name of file being requested or transmitted.
+  char load [LOADSIZE];
+};
 
-  2) Payload (900 bytes)
-*/
+void printPacket(struct Packet *packet)
+{
+  if (packet->type == 0) 
+  {
+    printf("[%s Data] ", packet->name);
+  }
+  else
+  {
+    printf("[%s ACK] ", packet->name);
+  }
+  printf("%u/%u, Checksum: %d\n", packet->seqNumber, packet->seqSize, packet->checkSum);
+}
 
-const double PLOSS = .25;
-const double PCORR = .10;
+void printSendPacket(struct Packet *packet)
+{
+  //Append a timestamp.
+  struct timeval tv; 
+  struct tm* ptm; 
+  char time_string[40]; 
+  long milliseconds; 
+ 
+  gettimeofday (&tv, NULL); 
+  ptm = localtime (&tv.tv_sec); 
+  strftime (time_string, sizeof (time_string), "%H:%M:%S", ptm); 
+  milliseconds = tv.tv_usec / 1000; 
+  /* Print the formatted time, in seconds, followed by a decimal point 
+     and the milliseconds. */ 
+  printf ("(SEND %s.%03ld) ", time_string, milliseconds); 
+  printPacket(packet);
+}
+
+void printReceivePacket(struct Packet *packet)
+{
+  //Append a timestamp.
+  struct timeval tv; 
+  struct tm* ptm; 
+  char time_string[40]; 
+  long milliseconds; 
+ 
+  gettimeofday (&tv, NULL); 
+  ptm = localtime (&tv.tv_sec); 
+  strftime (time_string, sizeof (time_string), "%H:%M:%S", ptm); 
+  milliseconds = tv.tv_usec / 1000; 
+  /* Print the formatted time, in seconds, followed by a decimal point 
+     and the milliseconds. */ 
+  printf ("(RECEIVE %s.%03ld) ", time_string, milliseconds);
+  printPacket(packet);
+}
+
+int checkSumHash(struct Packet *packet)
+{
+  return 0;
+}
+
+/* END PACKET DEFINITION */
+
 
 void error(char *msg)
 {
@@ -62,6 +115,32 @@ ssize_t sendToHelper(int sockfd, const void *buf, size_t len, int flags,
   }
   return sendto(sockfd, buf, len, flags, dest_addr, addrlen);
 }
+/*
+int getFileSize(char packet[], int startPos, char *fileName)
+  //Get the file stats with stat, then write into the packet.
+{
+  struct stat attr;
+  stat(fileName, &attr);
+  int size = attr.st_size;
+
+  int numDigits = 1;
+  int tenPower = 10;
+  while (size >= tenPower)
+  {
+    numDigits++;
+    tenPower*=10;
+  }
+
+  char buff[numDigits];
+  bzero(buff, numDigits);
+  snprintf (buff, sizeof(buff)+1, "%d", size);
+  writeChar(buff, packet , startPos);
+
+  return size;
+}
+*/
+
+/* BUFFER WRITING FUNCTIONS */
 
 void copyChar (char src[], int srcStart, int numChars, char dst[], int dstStart)
 //Copy numChar chars from srcStart into dst starting from dstStart
@@ -87,14 +166,13 @@ void copyUnsignedChar (unsigned char src[], int srcStart, int numChars, unsigned
   }
 }
 
-int writeChar (const char *src, char dst[], int dstStart)
-//Returns length of the characters being written
+int strCopy(char *dst, char *src)
 {
-  int i=0;
-  while (*(src+i)!= '\0' && *(src+i) != 0)
-  {
-    dst[dstStart+i] = *(src+i);
-    i++;
-  }
-  return i;
+    int len = strlen(src);
+    for (int i=0; i<len; i++)
+    {
+        dst[i] = src[i];
+    }
+    return len;
 }
+/* END BUFFER WRITING FUNCTIONS */

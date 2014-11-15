@@ -8,7 +8,7 @@
 #include <utils.h>
 
 //Acts as the server.
-void processRequestPacket(char *packet);
+void processRequestPacket(struct Packet *packet);
 void sigchld_handler(int s)
 {
     while(waitpid(-1, NULL, WNOHANG) > 0);
@@ -29,7 +29,7 @@ int main(int argc, char *argv[])
   int portno = atoi(argv[1]);                   //Port number
   int sockfd = socket(AF_INET, SOCK_DGRAM, 0);  //Socket access
 
-  if (sockfd < 1) {
+  if (sockfd < 0) {
     error("Error opening socket");
   }
 
@@ -50,25 +50,39 @@ int main(int argc, char *argv[])
       exit(1);
   }
 
-  //Wait for incoming messages.
+  //Read initial packet to start GBN algorithm
+  struct Packet packet;
+  recvlen = recvfrom(sockfd, &packet, sizeof(packet), 0, (struct sockaddr *)&recvAddr, &addrlen);
+  printReceivePacket(&packet);
+  if (recvlen < 0) {
+        error("Couldn't receive file request");
+  }
+
+  int lastAck = 0;
+  int pid = 0;
+
+    /*
+    ALGORITHM:
+      Begin timer. Run the C select() function?
+      Run for loop on WINDOWSIZE elements to send all.
+      As individual ACKS come in, increment.
+      Wait for either ACK(lastAck + WINDOWSIZE) to come back, or timeout.
+    */
   while (1) {
-    //Sender (server) messages from the receiver.
-      char packet [PACKETSIZE];
-      bzero (packet, PACKETSIZE);
-      recvlen = recvfrom(sockfd, packet, PACKETSIZE, 0, (struct sockaddr *)&recvAddr, &addrlen);
-      if (recvlen < 0) {
+      if (recvfrom(sockfd, &packet, sizeof(packet), 0, (struct sockaddr *)&recvAddr, &addrlen) < 0) {
         error("Couldn't receive file request");
       }
       else {
-        processRequestPacket(packet); 
-        printf("%s\n", packet);
-        sendto(sockfd, packet, strlen(packet), 0, (struct sockaddr *)&recvAddr, addrlen);
+        lastAck++; 
+        processRequestPacket(&packet); 
+        sendto(sockfd, &packet, sizeof(packet), 0, (struct sockaddr *)&recvAddr, addrlen);
       }
   }
      return 0;
 }
 
-void processRequestPacket(char *packet)
+
+void processRequestPacket(struct Packet *packet)
 {
-  printf("Process an incoming packet here!\n");
+  //Need to figure out an algorithm to send WINDOWSIZE packets back to the receiver.
 }

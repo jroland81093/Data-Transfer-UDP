@@ -8,23 +8,30 @@
 #include <string.h>
 #include <time.h>
 
+void error(char *msg)
+{
+    perror(msg);
+    exit(1);
+}
+
 /* PACKET DEFINITION */
 //Total Packet Size = 1000 Bytes
 //Packet Header Size = 100 Bytes
 //Payload Size = 900 Bytes
 
-#define WINDOWSIZE 10
+#define WINDOWSIZE 3
 #define ACK 1
 #define DATA 0
+#define END -1
 #define NAMESTART 16
 #define NAMESIZE 84
-#define LOADSIZE 900
-#define PLOSS .25  //Probability of packet loss
-#define PCORR .10  //Probability of packet corruption
+#define LOADSIZE 2 //900
+#define P_LOSS .1  //Probability of packet loss
+#define P_CORR .10  //Probability of packet corruption
 
 struct Packet {
   unsigned int type; 
-  //0 for Data (Sender sends this), 1 for ACK (Receiver sends this.)
+  //0 for Data (Sender sends this), 1 for ACK (Receiver sends this.) -1 Indicates termination (end of file).
 
   unsigned int seqSize; 
   //Denotes the total number of packets the file should be.
@@ -40,11 +47,38 @@ struct Packet {
   char load [LOADSIZE];
 };
 
+int checkSumHash(char *buff)
+//SBDM Hashing Algorithm
+{
+  int hash = 0;
+  int n;
+  int i;
+  for (i = 0; buff[i] != '\0'; i++)
+  {
+      if(buff[i] > 65)
+          n = buff[i] - 'a' + 1;
+
+      else
+          n = 27;
+
+      hash = ((hash << 3) + n);
+  }
+    return hash;
+}
+
+/* END PACKET DEFINITION */
+
+/* OUTPUT FUNCTIONS */
 void printPacket(struct Packet *packet)
 {
-  if (packet->type == 0) 
+  if (packet->type == ACK && packet->seqNumber == 0)
   {
-    printf("[%s Data] ", packet->name);
+    printf("Starting %s transfer\n", packet->name);
+    return;
+  }
+  if (packet->type == DATA) 
+  {
+    printf("[%s DATA] ", packet->name);
   }
   else
   {
@@ -67,7 +101,7 @@ void printSendPacket(struct Packet *packet)
   milliseconds = tv.tv_usec / 1000; 
   /* Print the formatted time, in seconds, followed by a decimal point 
      and the milliseconds. */ 
-  printf ("(SEND %s.%03ld) ", time_string, milliseconds); 
+  printf ("(Sent @ %s.%03ld) ", time_string, milliseconds); 
   printPacket(packet);
 }
 
@@ -85,94 +119,71 @@ void printReceivePacket(struct Packet *packet)
   milliseconds = tv.tv_usec / 1000; 
   /* Print the formatted time, in seconds, followed by a decimal point 
      and the milliseconds. */ 
-  printf ("(RECEIVE %s.%03ld) ", time_string, milliseconds);
+  printf ("(Received @ %s.%03ld) ", time_string, milliseconds);
   printPacket(packet);
 }
 
-int checkSumHash(struct Packet *packet)
+/* END OUTPUT FUNCTIONS */
+
+/* SENDING FUNCTIONS */
+
+void sendEndOfFile(int sockfd, const struct sockaddr *dest_addr, socklen_t addrlen)
+//Send to the receiver to indicate that it should terminate.
 {
-  return 0;
-}
-
-/* END PACKET DEFINITION */
-
-
-void error(char *msg)
-{
-    perror(msg);
-    exit(1);
+  struct Packet pack;
+  bzero(&pack, sizeof(pack));
+  pack.type = END;
+  sendto(sockfd, (const void *) &pack, sizeof(pack), 0, dest_addr, addrlen);
+  printf("Finished RDT of file.\n");
 }
 
 ssize_t sendToHelper(int sockfd, const void *buf, size_t len, int flags, 
   const struct sockaddr *dest_addr, socklen_t addrlen)
-//Tries to send packets with a probability of PLOSS
+//Tries to send packets with a probability of P_LOSS
 {
   int max = 100;
-  unsigned int random = ((unsigned)time(NULL) * rand()) % max;
-  if (random < PLOSS * 100)
+  struct Packet *pack = (struct Packet *) buf;
+
+  //Used to help generate random behavior.
+  int check = pack->checkSum;
+  if (check < 0)
+  {
+    check = -check;
+  }
+  unsigned int random = ((unsigned)time(NULL) * rand() * check) % max;
+  if (random < P_LOSS * 100)
   {
     return -1;
   }
-  return sendto(sockfd, buf, len, flags, dest_addr, addrlen);
-}
-/*
-int getFileSize(char packet[], int startPos, char *fileName)
-  //Get the file stats with stat, then write into the packet.
-{
-  struct stat attr;
-  stat(fileName, &attr);
-  int size = attr.st_size;
-
-  int numDigits = 1;
-  int tenPower = 10;
-  while (size >= tenPower)
+  int val = sendto(sockfd, buf, len, flags, dest_addr, addrlen);
+  if (val < 0)
   {
-    numDigits++;
-    tenPower*=10;
+    error("Error sending");
   }
-
-  char buff[numDigits];
-  bzero(buff, numDigits);
-  snprintf (buff, sizeof(buff)+1, "%d", size);
-  writeChar(buff, packet , startPos);
-
-  return size;
-}
-*/
-
-/* BUFFER WRITING FUNCTIONS */
-
-void copyChar (char src[], int srcStart, int numChars, char dst[], int dstStart)
-//Copy numChar chars from srcStart into dst starting from dstStart
-{
-  int i;
-  int j=0;
-  for (i=srcStart; i<numChars; i++)
-  {
-    dst[dstStart+j] = src[i];
-    j++;
-  }
+  return val;
 }
 
-void copyUnsignedChar (unsigned char src[], int srcStart, int numChars, unsigned char dst[], int dstStart)
-//Copy numChar chars from srcStart into dst starting from dstStart
-{
-  int i;
-  int j=0;
-  for (i=srcStart; i<numChars; i++)
-  {
-    dst[dstStart+j] = src[i];
-    j++;
-  }
-}
+/* END SENDING FUNCTIONS */
+
+/* MISC AUXILARY FUNCTIONS */
 
 int strCopy(char *dst, char *src)
 {
     int len = strlen(src);
-    for (int i=0; i<len; i++)
+    int i;
+    for (i=0; i<len; i++)
     {
         dst[i] = src[i];
     }
     return len;
 }
-/* END BUFFER WRITING FUNCTIONS */
+
+int ceiling(int num, int div)
+{
+  if (num % div == 0)
+  {
+    return num/div;
+  }
+  return (num/div)+1;
+}
+/* END MISC AUXILARY FUNCTIONS */

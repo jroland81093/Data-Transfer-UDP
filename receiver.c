@@ -5,8 +5,8 @@
 #include <utils.h>
 
 // Acts as the client.
-void initiateFileTransfer(struct Packet *sendPacket, char *fileName);
-int processDataPacket(struct Packet *receivePacket, struct Packet *sendPacket, int prevAck);
+void setupFileTransfer(struct Packet *packet, char *fileName);
+int processDataPacket(struct Packet *packet, int prevAck);
 
 int main(int argc, char *argv[])
 {
@@ -35,79 +35,82 @@ int main(int argc, char *argv[])
     bcopy((char *)server->h_addr, (char *)&sendAddr.sin_addr.s_addr, server->h_length); //Put host address into server address
     sendAddr.sin_port = htons(portno);
 
+    /*ALGORITHM START */
+
     //Initiate file request.
-    struct Packet sendPacket;
-    struct Packet receivePacket;
-    initiateFileTransfer(&sendPacket, fileName);
-    if (sendto(sockfd, &sendPacket, sizeof(sendPacket), 0, (struct sockaddr *) &sendAddr, sizeof(sendAddr)) < 0)
+    struct Packet packet;
+    int prevAck = 0;
+    setupFileTransfer(&packet, fileName);
+    if (sendto(sockfd, &packet, sizeof(packet), 0, (struct sockaddr *) &sendAddr, sizeof(sendAddr)) < 0)
     {
         error("Failure initiating file transfer, try again\n");
     }
-    int prevAck = 0;
+    printSendPacket(&packet);
 
-
-    /*
-    ALGORITHM:
-        Receive individual packets
-        Extract their sequence numbers.
-        If sequence number is out of sequence, send prevACK back. Otherwise, increment prevAck and send prevACK back.
-    */
-    while(1) {
-
-        if (recvfrom(sockfd, &receivePacket, sizeof(receivePacket), 0, (struct sockaddr *)&sendAddr, &addrlen) < 0)
+    //Wait for packets and send responses.
+    while (1)
+    {
+        if (recvfrom(sockfd, &packet, sizeof(packet), 0, (struct sockaddr *)&sendAddr, &addrlen) < 0)
         {
             error("Error receiving data");
         }
+        printReceivePacket(&packet);
 
-        prevAck = processDataPacket(&receivePacket, &sendPacket, prevAck);
-        if (sendToHelper(sockfd, &sendPacket, sizeof(sendPacket), 0, (struct sockaddr *) &sendAddr, sizeof(sendAddr)) < 0)
+        //IMPLEMENT PROCESSING OF DATA AND SENDING ALGORITHM HERE.
+        /*
+        prevAck = processDataPacket(&packet, prevAck);
+        if (prevAck == -1)
         {
-            fprintf(stderr, "Failure sending request packet, trying again\n");
-        }
-        else
-        {
-            printf("Sent request for %s successfully\n", fileName);
+            printf("File receival complete\n");
             break;
         }
+        if (sendToHelper(sockfd, &packet, sizeof(packet), 0, (struct sockaddr *) &sendAddr, sizeof(sendAddr)) < 0)
+        {
+            printf("DROPPED: ");
+        }
+        printSendPacket(&packet);
+        */
+        
     }
-
-    close(sockfd); //close socket
+    close(sockfd);
     return 0;
 }
 
 
-void initiateFileTransfer(struct Packet *sendPacket, char *fileName)
+void setupFileTransfer(struct Packet *packet, char *fileName)
 //Initiates transfer of a new file.
 {
-    bzero((char *)sendPacket, sizeof(*sendPacket));
-    sendPacket->type = ACK; //Only time a receiver should be sending DATA is for a new request.
-    sendPacket->seqNumber = 0;
-    strCopy(sendPacket->name, fileName);
-    printSendPacket(sendPacket);
+    bzero((char *)packet, sizeof(*packet));
+    packet->type = ACK; //Only time a receiver should be sending DATA is for a new request.
+    packet->seqNumber = 0;
+    strCopy(packet->name, fileName);
 }
 
-int checkSumValue(struct Packet *receivePacket)
-{
-    return 0;
-}
-
-int processDataPacket(struct Packet *receivePacket, struct Packet *sendPacket, int prevAck)
-//Stuffs the sendPacket with new appropriate data to ACK back to the sender
+int processDataPacket(struct Packet *packet, int prevAck)
+//Stuffs the packet with new appropriate data to ACK back to the sender
 //Returns the sequence number that is sent back
 {
-    bzero((char *)sendPacket, sizeof(*sendPacket));
-    sendPacket->type = ACK;
-    sendPacket->seqSize = receivePacket->seqSize;
-    sendPacket->checkSum = 0;
-    strCopy(receivePacket->name, sendPacket->name);
-
-    if ((receivePacket->seqNumber != prevAck+1) || checkSumValue(receivePacket) != receivePacket->checkSum)
+    if (packet->type == END)
     {
-        sendPacket->seqNumber = prevAck;
+        prevAck = -1;
     }
+    else if (packet->seqNumber != prevAck+1)
+    {
+        printf("Received packet out of order!\n\n");
+        packet->seqNumber = prevAck;
+    }
+    /* CheckSum isn't working ... 
+    else if (checkSumHash(packet->load) != packet->checkSum)
+    {
+        printf("Received: %d, Expected %d\n\n", checkSumHash(packet->load), packet->checkSum);
+        packet->seqNumber = prevAck;
+    }
+    */
     else
     {
-        sendPacket->seqNumber = prevAck+1;
+        packet->seqNumber = prevAck+1;
     }
+
+    packet->type = ACK;
     return prevAck;
 }

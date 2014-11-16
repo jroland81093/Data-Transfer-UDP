@@ -1,0 +1,6 @@
+#! /bin/bash
+
+rm receiver.o
+rm receiver
+rm sender.o
+rm sender

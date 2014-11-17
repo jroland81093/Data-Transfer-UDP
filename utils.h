@@ -19,25 +19,30 @@ void error(char *msg)
 //Packet Header Size = 100 Bytes
 //Payload Size = 900 Bytes
 
-#define WINDOWSIZE 3
 #define ACK 1
-#define DATA 0
-#define END -1
+#define DATA 2
+#define LOSTACK -1
+#define LOSTDATA -2
+#define END 0
+#define WINDOWSIZE 3
+
 #define NAMESTART 16
 #define NAMESIZE 84
-#define LOADSIZE 2 //900
-#define P_LOSS .1  //Probability of packet loss
+#define LOADSIZE 100 //900
+
+#define P_LOSS .25  //Probability of packet loss
 #define P_CORR .10  //Probability of packet corruption
 
 struct Packet {
-  unsigned int type; 
-  //0 for Data (Sender sends this), 1 for ACK (Receiver sends this.) -1 Indicates termination (end of file).
 
-  unsigned int seqSize; 
+  int type; 
+  //0 for Data (Sender sends this), 1 for ACK (Receiver sends this.
+
+  int seqSize; 
   //Denotes the total number of packets the file should be.
 
-  unsigned int seqNumber; 
-  //Sequence number of ACK or Data. 0 = Newfile.
+  int seqNumber; 
+  //Sequence number of ACK or Data. 0 = Newfile, -1= Dropped.
 
   int checkSum; 
   //Supposed value
@@ -76,7 +81,7 @@ void printPacket(struct Packet *packet)
     printf("Starting %s transfer\n", packet->name);
     return;
   }
-  if (packet->type == DATA) 
+  if (packet->type == DATA || packet->type == LOSTDATA) 
   {
     printf("[%s DATA] ", packet->name);
   }
@@ -84,7 +89,7 @@ void printPacket(struct Packet *packet)
   {
     printf("[%s ACK] ", packet->name);
   }
-  printf("%u/%u, Checksum: %d\n", packet->seqNumber, packet->seqSize, packet->checkSum);
+  printf("%d/%d, Checksum: %d\n", packet->seqNumber, packet->seqSize, packet->checkSum);
 }
 
 void printSendPacket(struct Packet *packet)
@@ -137,30 +142,58 @@ void sendEndOfFile(int sockfd, const struct sockaddr *dest_addr, socklen_t addrl
   printf("Finished RDT of file.\n");
 }
 
-ssize_t sendToHelper(int sockfd, const void *buf, size_t len, int flags, 
-  const struct sockaddr *dest_addr, socklen_t addrlen)
-//Tries to send packets with a probability of P_LOSS
+void sendWindowHelper(int sockfd, struct Packet window[], int type, const struct sockaddr *dest_addr, socklen_t addrlen)
 {
   int max = 100;
-  struct Packet *pack = (struct Packet *) buf;
+  int i =0;
+  for (i=0; i<WINDOWSIZE; i++)
+  {
+    
+  }
+}
 
-  //Used to help generate random behavior.
-  int check = pack->checkSum;
-  if (check < 0)
+void sendWindowHelper(int sockfd, struct Packet window[], int type, const struct sockaddr *dest_addr, socklen_t addrlen)
+{
+  int max = 100;
+  int i = 0;
+
+  for (i=0; i<WINDOWSIZE; i++)
   {
-    check = -check;
+    //Only print significant messages to the screen.
+    if (window[i].seqNumber != 0)
+    {
+      //Generate random behavior.
+      int random = ((unsigned)time(NULL) * rand());
+      random = random < 0 ? -random : random;
+
+      //Simulate Packet Loss
+      if (random % max < P_LOSS * max && window[i].seqNumber != 0)
+      {
+        fprintf(stderr, "DROPPED: ");
+        printSendPacket(&(window[i]));
+        window[i].type = LOSTDATA;
+      }
+
+      //Simulate Packet Corruption
+      else if (random % max < P_CORR * max && window)
+      {
+        fprintf(stderr, "CORRUPTED: ");
+        printSendPacket(&(window[i]));
+        //Do stuff to corrupt the packet.
+      }
+
+      else
+      {
+        printSendPacket(&window[i]);
+      }
+    }
   }
-  unsigned int random = ((unsigned)time(NULL) * rand() * check) % max;
-  if (random < P_LOSS * 100)
-  {
-    return -1;
-  }
-  int val = sendto(sockfd, buf, len, flags, dest_addr, addrlen);
-  if (val < 0)
+  fprintf(stderr, "\n");
+
+  if (sendto(sockfd, (void *)window, sizeof(window[0]) * WINDOWSIZE, 0, dest_addr, addrlen) < 0)
   {
     error("Error sending");
   }
-  return val;
 }
 
 /* END SENDING FUNCTIONS */

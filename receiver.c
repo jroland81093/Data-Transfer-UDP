@@ -5,10 +5,17 @@
 #include <utils.h>
 
 // Acts as the client.
+
+/*
 void setupFileTransfer(struct Packet *packet, char *fileName);
 int receiveWindow(struct Packet window[], int prevAck);
 void sendWindow(int sockfd, int lastAck, struct Packet window[], const struct sockaddr *dest_addr, socklen_t addrlen);
 void sendWindowHelper(int sockfd, struct Packet window[], const struct sockaddr *dest_addr, socklen_t addrlen);
+*/
+
+void sendFileTransfer(int sockfd, char* fileName, const struct sockaddr *dest_addr, socklen_t addrlen);
+int receiveWindow(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, struct Packet window[], int prevAck);
+void generateSendWindow(struct Packet window[], int lastAcked, int prevAck);
 
 int main(int argc, char *argv[])
 {
@@ -40,152 +47,95 @@ int main(int argc, char *argv[])
     /*ALGORITHM START */
 
     //Initiate file request.
-    struct Packet requestPacket;
-    int lastAck = 0;
-    setupFileTransfer(&requestPacket, fileName);
-    if (sendto(sockfd, &requestPacket, sizeof(requestPacket), 0, (struct sockaddr *) &sendAddr, sizeof(sendAddr)) < 0)
-    {
-        error("Failure initiating file transfer, try again\n");
-    }
-    printf("Sending request for %s\n", fileName);
-
-    //Wait for packets and responses.
+    sendFileTransfer(sockfd, fileName, (struct sockaddr *) &sendAddr, addrlen);
     struct Packet window[WINDOWSIZE];
-    while (1)
+    int lastAcked = 0;
+
+    int i = 0;
+    while(1)
     {
-        if (recvfrom(sockfd, window, sizeof(window[0]) * WINDOWSIZE, 0, (struct sockaddr *)&sendAddr, &addrlen) < 0)
-        {
-            error("Error receiving data");
-        }
-        lastAck = receiveWindow(window, lastAck);
-        sendWindow(sockfd, lastAck, window, (struct sockaddr *) &sendAddr, addrlen);
-        break;
+        int prevAck = lastAcked;
+        lastAcked = receiveWindow(sockfd, (struct sockaddr *) &sendAddr, addrlen, window, prevAck);
+        generateSendWindow(window, lastAcked, prevAck);
+        sendWindow(sockfd, (struct sockaddr *) &sendAddr, addrlen, window);
 
-        /*
-        printReceivePacket(&packet);
-
-        //IMPLEMENT PROCESSING OF DATA AND SENDING ALGORITHM HERE.
-        prevAck = processDataPacket(&packet, prevAck);
-        if (prevAck == -1)
-        {
-            printf("File receival complete\n");
-            break;
-        }
-        if (sendToHelper(sockfd, &packet, sizeof(packet), 0, (struct sockaddr *) &sendAddr, sizeof(sendAddr)) < 0)
-        {
-            printf("DROPPED: ");
-        }
-        printSendPacket(&packet);
-        */
-        
+        //TODO: Figure out when to break! After we successfully send the last ACK over, we should break.
     }
+
     close(sockfd);
     return 0;
 }
 
-
-void setupFileTransfer(struct Packet *packet, char *fileName)
-//Initiates transfer of a new file.
+void sendFileTransfer(int sockfd, char* fileName, const struct sockaddr *dest_addr, socklen_t addrlen)
+//Initiate a new file transfer.
 {
-    bzero((char *)packet, sizeof(*packet));
-    packet->type = ACK; //Only time a receiver should be sending DATA is for a new request.
-    packet->seqNumber = 0;
-    strCopy(packet->name, fileName);
+    struct Packet requestPacket;
+    bzero((char *) &requestPacket, sizeof(requestPacket));
+    requestPacket.seqNumber = 0;
+    requestPacket.type = FILEREQ;
+    strCopy(requestPacket.name, fileName);
+
+    if (sendto(sockfd, (void *) &requestPacket, sizeof(requestPacket), 0, dest_addr, addrlen) < 0)
+    {
+        error("Failure initiating file transfer, try again\n");
+    }
+    printSendPacket(&requestPacket);
 }
 
-int receiveWindow(struct Packet window[], int prevAck)
+int receiveWindow(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, struct Packet window[], int prevAck)
 {
+    bzero((char *) window, sizeof(window[0]) * WINDOWSIZE);
+    if (recvfrom(sockfd, window, sizeof(window[0]) * WINDOWSIZE, 0, recv_addr, &addrlen) < 0)
+    {
+        error("Error receiving data");
+    }
+
     int i = 0;
-    int lastAck = prevAck;
-    int badAck = 0;
+    int ackNumber = prevAck;
+    int flag = 0;
 
     for (i=0; i<WINDOWSIZE; i++)
     {
-        //Output only significant packets
-        if (window[i].seqNumber != 0)
+        if (window[i].type == LOSTDATA)
         {
-            if (window[i].type == LOSTACK || window[i].type == LOSTDATA)
-            {
-                badAck = 1;
-            }
-            /*
-            else if (checkSumHash(window[i].load) != window[i].checkSum)  
-            //DEBUG: Corruption won't work with the hash function.
-            {
-                fprintf(stderr, "CORRUPTED: ");
-                printReceivePacket(&window[i]);
-                badAck = 1;
-            }
-            */
-            else if (badAck == 1)
-            {
-                fprintf(stderr, "IGNORING: ");
-                printReceivePacket(&window[i]);
-            }
-            else
-            {
-                lastAck++;
-                printReceivePacket(&window[i]);
-            }
+            flag = 1;
+        }
+        /*
+        else if (checkSumHash(window[i].load) != window[i].checkSum)  
+        //DEBUG: Corruption won't work with the hash function.
+        {
+            fprintf(stderr, "CORRUPTED: ");
+            printReceivePacket(&window[i]);
+            flag = 1;
+        }
+        */
+        else if (flag == 1)
+        {
+            fprintf(stderr, "IGNORING: ");
+            printReceivePacket(&(window[prevAck+i]));
+        }
+        else
+        {
+            //Do some buffering or writing to a local file.
+            printReceivePacket(&(window[prevAck+i]));
+            ackNumber++;
         }
     }
-    fprintf(stderr, "\n");
-    return lastAck;
+    return ackNumber;
 }
 
-void sendWindow(int sockfd, int lastAck, struct Packet window[], const struct sockaddr *dest_addr, socklen_t addrlen)
-//Only send ACKS back
+void generateSendWindow(struct Packet window[], int lastAcked, int prevAck)
 {
-    int i=0;
-    while (window[i].seqNumber <= lastAck && window[i].seqNumber != 0 && window[i].type != LOSTACK && window[i].type != LOSTDATA)
+    int i;
+
+    //Get all of the valid data.
+    for(i=0; i<(lastAcked - prevAck); i++)
     {
         window[i].type = ACK;
-        i++;
     }
-    sendWindowHelper(sockfd, window, dest_addr, addrlen);
-}
-
-void sendWindowHelper(int sockfd, struct Packet window[], const struct sockaddr *dest_addr, socklen_t addrlen)
-{
-  int max = 100;
-  int i = 0;
-
-  for (i=0; i<WINDOWSIZE; i++)
-  {
-    //Only print significant messages to the screen.
-    if (window[i].seqNumber != 0)
+    for(i=(lastAcked - prevAck); i< WINDOWSIZE; i++)
     {
-      window[i].type = ACK;
-      //Generate random behavior.
-      int random = ((unsigned)time(NULL) * rand());
-      random = random < 0 ? -random : random;
-
-      //Simulate Packet Loss
-      if (random % max < P_LOSS * max && window[i].seqNumber != 0)
-      {
-        fprintf(stderr, "DROPPED: ");
-        printSendPacket(&(window[i]));
-        window[i].type = LOSTDATA;
-      }
-
-      //Simulate Packet Corruption
-      else if (random % max < P_CORR * max && window)
-      {
-        fprintf(stderr, "CORRUPTED: ");
-        printSendPacket(&(window[i]));
-        //Do stuff to corrupt the packet.
-      }
-
-      else
-      {
-        printSendPacket(&window[i]);
-      }
+        window[i].type = LOSTACK;
     }
-  }
-  fprintf(stderr, "\n");
 
-  if (sendto(sockfd, (void *)window, sizeof(window[0]) * WINDOWSIZE, 0, dest_addr, addrlen) < 0)
-  {
-    error("Error sending");
-  }
 }

@@ -70,10 +70,17 @@ int main(int argc, char *argv[])
     char fileName[NAMESIZE];
     int filefd;
     int seqSize = receiveFileTransfer(sockfd, (struct sockaddr *) &recvAddr, addrlen, window, fileName, &filefd);
-    int lastAcked = 0;
 
+    if (seqSize < 0)
+      //Tell the receiver that the file was not found.
+    {
+      window[0].type = BADFILE;
+      sendto(sockfd, (void *)window , sizeof(window[0]), 0, (struct sockaddr *) &recvAddr, addrlen);
+    }
+
+    int lastAcked = 0;
     //Loop until we receive the final ACK
-    while (1)
+    while (1 && seqSize > 0)
     {
       int prevAck = lastAcked;
       generateSendWindow(window, fileName, filefd, seqSize, lastAcked);
@@ -82,13 +89,15 @@ int main(int argc, char *argv[])
 
       if (lastAcked == seqSize)
       {
-        fprintf(stderr, "RDT is done!\n");
+        fprintf(stderr, "RDT for %s is complete.\nWaiting for next file request...\n", fileName);
+        fprintf(stderr, "--------\n\n");
         break;
       }
       else if (lastAcked == prevAck)
-      //Timeout and resent
+      //Timeout and resend packets.
       {
-        fprintf(stderr, "TIMEOUT!\n");
+        sleep(TIMEOUT);
+        fprintf(stderr, "TIMEOUT! Retrying now...\n");
       }
     }
     fclose(fdopen(filefd, "rb"));
@@ -117,12 +126,12 @@ int receiveFileTransfer(int sockfd, struct sockaddr *recv_addr, socklen_t addrle
     //DEBUG: If the file isn't there, we get a seg fault?
     FILE *fp = fopen(requestPacket.name, "rb");
     if (fp == NULL) {
-      //sendEndOfFile(sockfd, (struct sockaddr *)&recvAddr, addrlen);
-      error("File not found");
+      fprintf(stderr, "No such file or directory\n");
+      fprintf(stderr, "--------\n\n");
+      return -1;
     }
     int filed = fileno(fp);
     if(fstat(filed, &fileStat) < 0) {
-      //sendEndOfFile(sockfd, (struct sockaddr *)&recvAddr, addrlen);
       error("Could not determine file");
     }
 

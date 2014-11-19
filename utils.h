@@ -19,6 +19,7 @@ void error(char *msg)
 //Packet Header Size = 100 Bytes
 //Payload Size = 900 Bytes
 
+#define BADFILE -1
 #define FILEREQ 1
 #define DATA 2
 #define ACK 3
@@ -27,7 +28,8 @@ void error(char *msg)
 #define CORRDATA 6
 #define CORRACK 7
 
-#define WINDOWSIZE 3
+#define TIMEOUT 3 //3 Seconds to retry.
+#define WINDOWSIZE 4
 
 #define NAMESTART 16
 #define NAMESIZE 84
@@ -142,6 +144,7 @@ void printReceivePacket(struct Packet *packet)
 
 /* SENDING FUNCTIONS */
 
+//Returns 1 if the packet was sent correctly, 0 otherwise. 
 void sendWindow(int sockfd, const struct sockaddr *dest_addr, socklen_t addrlen, struct Packet window[])
 {
   int max = 100;
@@ -156,7 +159,7 @@ void sendWindow(int sockfd, const struct sockaddr *dest_addr, socklen_t addrlen,
     //If packet lost.
     if (0) //random % max < P_LOSS * max)
     {
-        if (window[i].type == DATA || window[i].type == LOSTDATA)
+        if (window[i].type == DATA || window[i].type == LOSTDATA || window[i].type == CORRDATA)
         {
           window[i].type = LOSTDATA;
         }
@@ -169,7 +172,7 @@ void sendWindow(int sockfd, const struct sockaddr *dest_addr, socklen_t addrlen,
     //If Packet Corruption
     else if (0) //random % max < P_CORR * max)
     {
-        if (window[i].type == DATA || window[i].type == CORRDATA)
+        if (window[i].type == DATA || window[i].type == LOSTDATA || window[i].type == CORRDATA)
         {
           window[i].type = CORRDATA;
         }

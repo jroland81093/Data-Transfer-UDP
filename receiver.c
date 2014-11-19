@@ -51,7 +51,6 @@ int main(int argc, char *argv[])
     struct Packet window[WINDOWSIZE];
     int lastAcked = 0;
 
-    int i = 0;
     while(1)
     {
         int prevAck = lastAcked;
@@ -94,6 +93,11 @@ int receiveWindow(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, str
         error("Error receiving data");
     }
 
+    if (window[0].type == BADFILE)
+    {
+        error("File not found!");
+    }
+
     int i = 0;
     int ackNumber = prevAck;
     int flag = 0;
@@ -105,7 +109,6 @@ int receiveWindow(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, str
             flag = 1;
         }
         else if (window[i].type == CORRDATA)  
-        //DEBUG: Corruption won't work with the hash function.
         {
             fprintf(stderr, "CORRUPTED: ");
             printReceivePacket(&window[i]);
@@ -116,7 +119,7 @@ int receiveWindow(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, str
             fprintf(stderr, "IGNORING: ");
             printReceivePacket(&(window[prevAck+i]));
         }
-        else
+        else if (window[i].seqNumber > 0 && window[i].seqNumber <= window[i].seqSize) //Valid packet.
         {
             //Do some buffering or writing to a local file.
             printReceivePacket(&(window[prevAck+i]));
@@ -129,7 +132,6 @@ int receiveWindow(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, str
 void generateSendWindow(struct Packet window[], int lastAcked, int prevAck)
 {
     int i;
-
     //Get all of the valid data.
     for(i=0; i<(lastAcked - prevAck); i++)
     {

@@ -24,6 +24,8 @@ void error(char *msg)
 #define ACK 3
 #define LOSTDATA 4
 #define LOSTACK 5
+#define CORRDATA 6
+#define CORRACK 7
 
 #define WINDOWSIZE 3
 
@@ -152,7 +154,7 @@ void sendWindow(int sockfd, const struct sockaddr *dest_addr, socklen_t addrlen,
     random = random < 0 ? -random : random;
 
     //If packet lost.
-    if (0)//random % max < P_LOSS * max)
+    if (0) //random % max < P_LOSS * max)
     {
         if (window[i].type == DATA || window[i].type == LOSTDATA)
         {
@@ -165,10 +167,16 @@ void sendWindow(int sockfd, const struct sockaddr *dest_addr, socklen_t addrlen,
     }
 
     //If Packet Corruption
-    else if (random % max < P_CORR * max)
+    else if (0) //random % max < P_CORR * max)
     {
-        printSendPacket(&window[i]);
-        //Do stuff to corrupt the packet.
+        if (window[i].type == DATA || window[i].type == CORRDATA)
+        {
+          window[i].type = CORRDATA;
+        }
+        else
+        {
+          window[i].type = CORRACK;
+        }
     }
     else
     {

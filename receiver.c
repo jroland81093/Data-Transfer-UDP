@@ -59,7 +59,11 @@ int main(int argc, char *argv[])
         generateSendWindow(window, lastAcked, prevAck);
         sendWindow(sockfd, (struct sockaddr *) &sendAddr, addrlen, window);
 
-        //TODO: Figure out when to break! After we successfully send the last ACK over, we should break.
+        //break when last packet is sent (when its sequence number matches total sequence size)
+        if (window[WINDOWSIZE-1].seqNumber == window[WINDOWSIZE-1].seqSize)
+        {
+            break;
+        }
     }
 
     close(sockfd);
@@ -100,15 +104,13 @@ int receiveWindow(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, str
         {
             flag = 1;
         }
-        /*
-        else if (checkSumHash(window[i].load) != window[i].checkSum)  
+        else if (window[i].type == CORRDATA)  
         //DEBUG: Corruption won't work with the hash function.
         {
             fprintf(stderr, "CORRUPTED: ");
             printReceivePacket(&window[i]);
             flag = 1;
         }
-        */
         else if (flag == 1)
         {
             fprintf(stderr, "IGNORING: ");

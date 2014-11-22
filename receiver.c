@@ -14,7 +14,8 @@ void sendWindowHelper(int sockfd, struct Packet window[], const struct sockaddr 
 */
 
 void sendFileTransfer(int sockfd, char* fileName, const struct sockaddr *dest_addr, socklen_t addrlen);
-int receiveWindow(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, struct Packet window[], int prevAck);
+int receiveWindow(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, struct Packet window[], int prevAck, int fd);
+void writeToFileSystem(int fd, struct Packet packet);
 void generateSendWindow(struct Packet window[], int lastAcked, int prevAck);
 
 int main(int argc, char *argv[])
@@ -50,11 +51,13 @@ int main(int argc, char *argv[])
     sendFileTransfer(sockfd, fileName, (struct sockaddr *) &sendAddr, addrlen);
     struct Packet window[WINDOWSIZE];
     int lastAcked = 0;
+    FILE *fp = fopen("OUTPUT", "wb");
+    int filefd = fileno(fp);
 
     while(1)
     {
         int prevAck = lastAcked;
-        lastAcked = receiveWindow(sockfd, (struct sockaddr *) &sendAddr, addrlen, window, prevAck);
+        lastAcked = receiveWindow(sockfd, (struct sockaddr *) &sendAddr, addrlen, window, prevAck, filefd);
         generateSendWindow(window, lastAcked, prevAck);
         sendWindow(sockfd, (struct sockaddr *) &sendAddr, addrlen, window);
 
@@ -65,6 +68,7 @@ int main(int argc, char *argv[])
         }
     }
 
+    fclose(fp);
     close(sockfd);
     return 0;
 }
@@ -85,7 +89,7 @@ void sendFileTransfer(int sockfd, char* fileName, const struct sockaddr *dest_ad
     printSendPacket(&requestPacket);
 }
 
-int receiveWindow(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, struct Packet window[], int prevAck)
+int receiveWindow(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, struct Packet window[], int prevAck, int fd)
 {
     bzero((char *) window, sizeof(window[0]) * WINDOWSIZE);
     if (recvfrom(sockfd, window, sizeof(window[0]) * WINDOWSIZE, 0, recv_addr, &addrlen) < 0)
@@ -121,12 +125,29 @@ int receiveWindow(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, str
         }
         else if (window[i].seqNumber > 0 && window[i].seqNumber <= window[i].seqSize) //Valid packet.
         {
-            //Do some buffering or writing to a local file.
-            printReceivePacket(&(window[prevAck+i]));
+            writeToFileSystem(fd, window[i]);
+            printReceivePacket(&(window[i]));
             ackNumber++;
         }
     }
     return ackNumber;
+}
+
+void writeToFileSystem(int fd, struct Packet packet)
+{
+    if (packet.seqNumber == packet.seqSize)
+    {
+        int size = 0;
+        while (packet.load[size] != 0)
+        {
+            size++;
+        }
+        pwrite(fd, (void *) packet.load, size, (packet.seqNumber - 1 ) * LOADSIZE);
+    }
+    else
+    {
+        pwrite(fd, (void *) packet.load, LOADSIZE, (packet.seqNumber - 1 ) * LOADSIZE);
+    }
 }
 
 void generateSendWindow(struct Packet window[], int lastAcked, int prevAck)

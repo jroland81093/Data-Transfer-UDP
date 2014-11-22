@@ -29,7 +29,7 @@ void error(char *msg)
 #define CORRACK 7
 
 #define TIMEOUT 3 //3 Seconds to retry.
-#define WINDOWSIZE 4
+#define WINDOWSIZE 3
 
 #define NAMESTART 16
 #define NAMESIZE 84

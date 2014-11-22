@@ -130,8 +130,8 @@ int receiveFileTransfer(int sockfd, struct sockaddr *recv_addr, socklen_t addrle
       fprintf(stderr, "--------\n\n");
       return -1;
     }
-    int filed = fileno(fp);
-    if(fstat(filed, &fileStat) < 0) {
+    int fd = fileno(fp);
+    if(fstat(fd, &fileStat) < 0) {
       error("Could not determine file");
     }
 
@@ -145,7 +145,7 @@ int receiveFileTransfer(int sockfd, struct sockaddr *recv_addr, socklen_t addrle
 
     //fclose(fp);
     strCopy(fileName, requestPacket.name);
-    *filefd = filed;
+    *filefd = fd;
     return numSequences;
 }
 
@@ -155,12 +155,12 @@ void generateSendWindow(struct Packet window[], char fileName[], int filefd, int
   int i;
   int result;
   char buff[LOADSIZE];
-  bzero(buff, LOADSIZE);
   bzero((char *)window, sizeof(window[0]) * WINDOWSIZE);
 
   for (i=0; i<WINDOWSIZE; i++)
   {
     int seqNum = lastAcked+i+1;
+    bzero(buff, LOADSIZE);
     result = pread(filefd, buff, LOADSIZE, LOADSIZE*(seqNum-1));
 
     if (seqNum > seqSize)

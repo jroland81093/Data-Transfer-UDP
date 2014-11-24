@@ -97,7 +97,7 @@ int main(int argc, char *argv[])
       //Timeout and resend packets.
       {
         sleep(TIMEOUT);
-        fprintf(stderr, "TIMEOUT! Retrying now...\n");
+        fprintf(stderr, "TIMEOUT! Retrying now...\n\n");
       }
     }
     fclose(fdopen(filefd, "rb"));
@@ -153,22 +153,19 @@ void generateSendWindow(struct Packet window[], char fileName[], int filefd, int
 //Sends the next window of files to the receiver.
 {
   int i;
-  int result;
   char buff[LOADSIZE];
   bzero((char *)window, sizeof(window[0]) * WINDOWSIZE);
 
   for (i=0; i<WINDOWSIZE; i++)
   {
-    int seqNum = lastAcked+i+1;
     bzero(buff, LOADSIZE);
-    result = pread(filefd, buff, LOADSIZE, LOADSIZE*(seqNum-1));
-
+    int seqNum = lastAcked+i+1;
     if (seqNum > seqSize)
-      //End of file
+    //End of file
     {
       break;
     }
-    else if (result < 0)
+    else if (pread(filefd, buff, LOADSIZE, LOADSIZE*(seqNum-1)) < 0)
     {
       fprintf(stderr, "Error reading file");
     }
@@ -177,7 +174,6 @@ void generateSendWindow(struct Packet window[], char fileName[], int filefd, int
       window[i].type = DATA;
       window[i].seqSize = seqSize;
       window[i].seqNumber = seqNum;
-      window[i].checkSum = checkSumHash(buff);
       strCopy(window[i].name, fileName);
       memcpy((void *)window[i].load, (void *) buff, LOADSIZE);
     }

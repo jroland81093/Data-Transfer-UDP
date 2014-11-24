@@ -31,8 +31,8 @@ void error(char *msg)
 #define TIMEOUT 3 //3 Seconds to retry.
 #define WINDOWSIZE 3
 
-#define NAMESTART 16
-#define NAMESIZE 84
+#define NAMESTART 12
+#define NAMESIZE 88
 #define LOADSIZE 30 //900
 
 #define P_LOSS .25  //Probability of packet loss
@@ -49,33 +49,11 @@ struct Packet {
   int seqNumber; 
   //Sequence number of ACK or Data. 0 = Newfile.
 
-  int checkSum; 
-  //Supposed value
-
   char name [NAMESIZE]; 
   //Name of file being requested or transmitted.
 
   char load [LOADSIZE];
 };
-
-int checkSumHash(char *buff)
-//SBDM Hashing Algorithm
-{
-  int hash = 0;
-  int n;
-  int i;
-  for (i = 0; buff[i] != '\0'; i++)
-  {
-      if(buff[i] > 65)
-          n = buff[i] - 'a' + 1;
-
-      else
-          n = 27;
-
-      hash = ((hash << 3) + n);
-  }
-    return hash;
-}
 
 /* END PACKET DEFINITION */
 
@@ -85,19 +63,17 @@ void printPacket(struct Packet *packet)
 {
   if (packet->type == FILEREQ)
   {
-    fprintf(stderr, "Request for %s\n\n", packet->name);
+    printf("Request for %s\n\n", packet->name);
     return;
   }
   else if (packet->type == DATA)
   {
-    fprintf(stderr, "[%s DATA] ", packet->name);
-    fprintf(stderr, "%d/%d, Checksum: %d, Load:\n", packet->seqNumber, packet->seqSize, packet->checkSum);
-    fprintf(stderr, "%s\n\n", packet->load);
+    printf("[%s DATA %d/%d] \n", packet->name, packet->seqNumber, packet->seqSize);
+    printf("%s\n\n", packet->load);
   }
   else if (packet->type == ACK)
   {
-    fprintf(stderr, "[%s ACK] ", packet->name);
-    fprintf(stderr, "%d/%d\n\n", packet->seqNumber, packet->seqSize);
+    printf("[%s ACK %d/%d] \n\n", packet->name, packet->seqNumber, packet->seqSize);
   }
 
 }
@@ -116,26 +92,31 @@ void printSendPacket(struct Packet *packet)
     strftime (time_string, sizeof (time_string), "%H:%M:%S", ptm); 
     milliseconds = tv.tv_usec / 1000; 
 
-    fprintf (stderr, "(SEND @ %s.%03ld)\n", time_string, milliseconds); 
+    printf ("(SEND @ %s.%03ld)\n", time_string, milliseconds); 
     printPacket(packet);
   }
 }
 
 void printReceivePacket(struct Packet *packet)
 {
+  struct timeval tv; 
+  struct tm* ptm; 
+  char time_string[40]; 
+  long milliseconds; 
+ 
+  gettimeofday (&tv, NULL); 
+  ptm = localtime (&tv.tv_sec); 
+  strftime (time_string, sizeof (time_string), "%H:%M:%S", ptm); 
+  milliseconds = tv.tv_usec / 1000; 
+
   if (packet->type == FILEREQ || packet->type == DATA || packet->type == ACK)
   {
-    struct timeval tv; 
-    struct tm* ptm; 
-    char time_string[40]; 
-    long milliseconds; 
-   
-    gettimeofday (&tv, NULL); 
-    ptm = localtime (&tv.tv_sec); 
-    strftime (time_string, sizeof (time_string), "%H:%M:%S", ptm); 
-    milliseconds = tv.tv_usec / 1000; 
-
-    fprintf (stderr, "(RECV @ %s.%03ld)\n", time_string, milliseconds); 
+    printf ("(RECV @ %s.%03ld)\n", time_string, milliseconds); 
+    printPacket(packet);
+  }
+  else if (packet->type == CORRDATA || packet->type == CORRACK)
+  {
+    printf ("(CORRUPT RECV @ %s.%03ld)\n", time_string, milliseconds); 
     printPacket(packet);
   }
 }
@@ -144,7 +125,6 @@ void printReceivePacket(struct Packet *packet)
 
 /* SENDING FUNCTIONS */
 
-//Returns 1 if the packet was sent correctly, 0 otherwise. 
 void sendWindow(int sockfd, const struct sockaddr *dest_addr, socklen_t addrlen, struct Packet window[])
 {
   int max = 100;
@@ -153,11 +133,17 @@ void sendWindow(int sockfd, const struct sockaddr *dest_addr, socklen_t addrlen,
   for (i=0; i<WINDOWSIZE; i++)
   {
     //Generate random number.
-    int random = ((unsigned)time(NULL) * rand());
+    int random = rand();
+    //int random = ((unsigned)time(NULL) * rand());
     random = random < 0 ? -random : random;
 
-    //If packet lost.
-    if (0) //random % max < P_LOSS * max)
+    //Print a packet only if it wasn't lost. Then mutate it for the receiver.
+    if (window[i].type == DATA || window[i].type == ACK || window[i].type == CORRDATA || window[i].type == CORRACK)
+    {
+      printSendPacket(&window[i]);
+    }
+    
+    if (random % max < P_LOSS * max)
     {
         if (window[i].type == DATA || window[i].type == LOSTDATA || window[i].type == CORRDATA)
         {
@@ -168,9 +154,7 @@ void sendWindow(int sockfd, const struct sockaddr *dest_addr, socklen_t addrlen,
           window[i].type = LOSTACK;
         }
     }
-
-    //If Packet Corruption
-    else if (0) //random % max < P_CORR * max)
+    else if ((random * random) % max < P_CORR * max)
     {
         if (window[i].type == DATA || window[i].type == LOSTDATA || window[i].type == CORRDATA)
         {
@@ -180,10 +164,6 @@ void sendWindow(int sockfd, const struct sockaddr *dest_addr, socklen_t addrlen,
         {
           window[i].type = CORRACK;
         }
-    }
-    else
-    {
-        printSendPacket(&window[i]);
     }
   }
 

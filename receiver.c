@@ -14,7 +14,7 @@ void sendWindowHelper(int sockfd, struct Packet window[], const struct sockaddr 
 */
 
 void sendFileTransfer(int sockfd, char* fileName, const struct sockaddr *dest_addr, socklen_t addrlen);
-int receiveWindow(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, struct Packet window[], int prevAck, int fd);
+int receiveWindow(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, struct Packet window[], int prevAck, int fd, int *seqSize);
 void writeToFileSystem(int fd, struct Packet packet);
 void generateSendWindow(struct Packet window[], int lastAcked, int prevAck);
 
@@ -54,15 +54,16 @@ int main(int argc, char *argv[])
     FILE *fp = fopen("OUTPUT", "wb");
     int filefd = fileno(fp);
 
+    int seqSize = -1;
     while(1)
     {
         int prevAck = lastAcked;
-        lastAcked = receiveWindow(sockfd, (struct sockaddr *) &sendAddr, addrlen, window, prevAck, filefd);
+        lastAcked = receiveWindow(sockfd, (struct sockaddr *) &sendAddr, addrlen, window, prevAck, filefd, &seqSize);
         generateSendWindow(window, lastAcked, prevAck);
         sendWindow(sockfd, (struct sockaddr *) &sendAddr, addrlen, window);
 
         //break when last packet is sent (when its sequence number matches total sequence size)
-        if (window[WINDOWSIZE-1].seqNumber == window[WINDOWSIZE-1].seqSize)
+        if (lastAcked == seqSize)
         {
             break;
         }
@@ -89,9 +90,11 @@ void sendFileTransfer(int sockfd, char* fileName, const struct sockaddr *dest_ad
     printSendPacket(&requestPacket);
 }
 
-int receiveWindow(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, struct Packet window[], int prevAck, int fd)
+int receiveWindow(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, struct Packet window[], int prevAck, int fd, int *seqSize)
 {
     bzero((char *) window, sizeof(window[0]) * WINDOWSIZE);
+    //Zero out the receiving window before receiving data.
+
     if (recvfrom(sockfd, window, sizeof(window[0]) * WINDOWSIZE, 0, recv_addr, &addrlen) < 0)
     {
         error("Error receiving data");
@@ -114,17 +117,17 @@ int receiveWindow(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, str
         }
         else if (window[i].type == CORRDATA)  
         {
-            fprintf(stderr, "CORRUPTED: ");
             printReceivePacket(&window[i]);
             flag = 1;
         }
-        else if (flag == 1)
+        else if (flag == 1 && window[i].type == DATA)
         {
             fprintf(stderr, "IGNORING: ");
-            printReceivePacket(&(window[prevAck+i]));
+            printReceivePacket(&(window[i]));
         }
-        else if (window[i].seqNumber > 0 && window[i].seqNumber <= window[i].seqSize) //Valid packet.
+        else if (window[i].type == DATA && window[i].seqNumber > 0 && window[i].seqNumber <= window[i].seqSize) //Valid packet.
         {
+            *seqSize = window[i].seqSize;
             writeToFileSystem(fd, window[i]);
             printReceivePacket(&(window[i]));
             ackNumber++;

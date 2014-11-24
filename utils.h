@@ -29,13 +29,13 @@ void error(char *msg)
 #define CORRACK 7
 
 #define TIMEOUT 3 //3 Seconds to retry.
-#define WINDOWSIZE 3
+#define WINDOWSIZE 10
 
 #define NAMESTART 12
 #define NAMESIZE 88
-#define LOADSIZE 30 //900
+#define LOADSIZE 50 //900
 
-#define P_LOSS .25  //Probability of packet loss
+#define P_LOSS .10  //Probability of packet loss
 #define P_CORR .10  //Probability of packet corruption
 
 struct Packet {
@@ -66,14 +66,18 @@ void printPacket(struct Packet *packet)
     printf("Request for %s\n\n", packet->name);
     return;
   }
-  else if (packet->type == DATA)
+  else if (packet->type == DATA || packet->type == CORRDATA)
   {
     printf("[%s DATA %d/%d] \n", packet->name, packet->seqNumber, packet->seqSize);
     printf("%s\n\n", packet->load);
   }
-  else if (packet->type == ACK)
+  else if (packet->type == ACK || packet->type == CORRACK)
   {
     printf("[%s ACK %d/%d] \n\n", packet->name, packet->seqNumber, packet->seqSize);
+  }
+  else
+  {
+    printf("****** UH OH! ****** Type is %d\n", packet->type);
   }
 
 }
@@ -133,37 +137,54 @@ void sendWindow(int sockfd, const struct sockaddr *dest_addr, socklen_t addrlen,
   for (i=0; i<WINDOWSIZE; i++)
   {
     //Generate random number.
-    int random = rand();
-    //int random = ((unsigned)time(NULL) * rand());
-    random = random < 0 ? -random : random;
+    int lossRandom = (unsigned)time(NULL) * rand();
+    if (lossRandom < 0)
+    {
+      lossRandom = -lossRandom;
+    }
+    int corrRandom = (unsigned)time(NULL) * rand();
+    if (corrRandom < 0)
+    {
+      corrRandom = -corrRandom;
+    }
+    //int random = ( * rand());
 
     //Print a packet only if it wasn't lost. Then mutate it for the receiver.
+    if (lossRandom % max < P_LOSS * max && (window[i].type == DATA || window[i].type == ACK || window[i].type == CORRDATA || window[i].type == CORRACK))
+    {
+      printf("DROPPING:\n");
+    }
+    else if (corrRandom % max < P_CORR * max && (window[i].type == DATA || window[i].type == ACK || window[i].type == CORRDATA || window[i].type == CORRACK))
+    {
+      printf("CORRUPTING\n");
+    }
+
     if (window[i].type == DATA || window[i].type == ACK || window[i].type == CORRDATA || window[i].type == CORRACK)
     {
       printSendPacket(&window[i]);
     }
     
-    if (random % max < P_LOSS * max)
+    if (lossRandom % max < P_LOSS * max)
     {
-        if (window[i].type == DATA || window[i].type == LOSTDATA || window[i].type == CORRDATA)
-        {
-          window[i].type = LOSTDATA;
-        }
-        else
-        {
-          window[i].type = LOSTACK;
-        }
+      if (window[i].type == DATA || window[i].type == LOSTDATA || window[i].type == CORRDATA)
+      {
+        window[i].type = LOSTDATA;
+      }
+      else
+      {
+        window[i].type = LOSTACK;
+      }
     }
-    else if ((random * random) % max < P_CORR * max)
+    else if (corrRandom % max < P_CORR * max)
     {
-        if (window[i].type == DATA || window[i].type == LOSTDATA || window[i].type == CORRDATA)
-        {
-          window[i].type = CORRDATA;
-        }
-        else
-        {
-          window[i].type = CORRACK;
-        }
+      if (window[i].type == DATA || window[i].type == LOSTDATA || window[i].type == CORRDATA)
+      {
+        window[i].type = CORRDATA;
+      }
+      else
+      {
+        window[i].type = CORRACK;
+      }
     }
   }
 

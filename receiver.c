@@ -111,26 +111,31 @@ int receiveWindow(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, str
 
     for (i=0; i<WINDOWSIZE; i++)
     {
-        if (window[i].type == LOSTDATA)
+        if (window[i].seqNumber > 0 && window[i].seqNumber <= window[i].seqSize && window[i].type > 0)
+            //If this is a valid packet
         {
-            flag = 1;
-        }
-        else if (window[i].type == CORRDATA)  
-        {
-            printReceivePacket(&window[i]);
-            flag = 1;
-        }
-        else if (flag == 1 && window[i].type == DATA)
-        {
-            fprintf(stderr, "IGNORING: ");
-            printReceivePacket(&(window[i]));
-        }
-        else if (window[i].type == DATA && window[i].seqNumber > 0 && window[i].seqNumber <= window[i].seqSize) //Valid packet.
-        {
-            *seqSize = window[i].seqSize;
-            writeToFileSystem(fd, window[i]);
-            printReceivePacket(&(window[i]));
-            ackNumber++;
+            //DEBUG: If the packet received has already been received, truncate it?
+            if (window[i].type == LOSTDATA)
+            {
+                flag = 1;
+            }
+            else if (window[i].type == CORRDATA && flag == 0)
+            {
+                flag = 1;
+                printReceivePacket(&window[i]);
+            }
+            else if (flag == 1)
+            {
+                printf("IGNORING: ");
+                printReceivePacket(&(window[i]));
+            }
+            else if (window[i].type == DATA)
+            {
+                *seqSize = window[i].seqSize;
+                writeToFileSystem(fd, window[i]);
+                printReceivePacket(&(window[i]));
+                ackNumber++;
+            }
         }
     }
     return ackNumber;

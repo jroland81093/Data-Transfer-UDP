@@ -29,11 +29,11 @@ void error(char *msg)
 #define CORRACK 7
 
 #define TIMEOUT 3 //3 Seconds to retry.
-#define WINDOWSIZE 10
+#define WINDOWSIZE 3
 
 #define NAMESTART 12
 #define NAMESIZE 88
-#define LOADSIZE 50 //900
+#define LOADSIZE 60 //900
 
 #define P_LOSS .10  //Probability of packet loss
 #define P_CORR .10  //Probability of packet corruption
@@ -147,7 +147,6 @@ void sendWindow(int sockfd, const struct sockaddr *dest_addr, socklen_t addrlen,
     {
       corrRandom = -corrRandom;
     }
-    //int random = ( * rand());
 
     //Print a packet only if it wasn't lost. Then mutate it for the receiver.
     if (lossRandom % max < P_LOSS * max && (window[i].type == DATA || window[i].type == ACK || window[i].type == CORRDATA || window[i].type == CORRACK))

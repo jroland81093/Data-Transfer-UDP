@@ -186,12 +186,29 @@ int receiveWindow(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, str
       error("Couldn't receive request");
   }
 
+  int i =0;
+  int numAcks = 0;
+  for (i=0; i<WINDOWSIZE; i++)
+  {
+    if (window[i].type == ACK)
+    {
+      printReceivePacket(&window[i]);
+      numAcks++;
+    }
+    else if (window[i].type == CORRACK)
+    {
+      printReceivePacket(&window[i]);
+    }
+  }
+  return numAcks;
+/*
+  Used if we only want to print valid ACKs
   int i=0;
-
   while (window[i].type == ACK)
   {
     printReceivePacket(&window[i]);
     i++;
   }
   return i;
+  */
 }

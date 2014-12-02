@@ -1,17 +1,10 @@
 
 #include <netinet/in.h>
-#include <netdb.h>      // define structures like hostent
+#include <netdb.h>
 
 #include <utils.h>
 
 // Acts as the client.
-
-/*
-void setupFileTransfer(struct Packet *packet, char *fileName);
-int receiveWindow(struct Packet window[], int prevAck);
-void sendWindow(int sockfd, int lastAck, struct Packet window[], const struct sockaddr *dest_addr, socklen_t addrlen);
-void sendWindowHelper(int sockfd, struct Packet window[], const struct sockaddr *dest_addr, socklen_t addrlen);
-*/
 
 void sendFileTransfer(int sockfd, char* fileName, const struct sockaddr *dest_addr, socklen_t addrlen);
 int receiveWindow(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, struct Packet window[], int prevAck, int fd, int *seqSize);

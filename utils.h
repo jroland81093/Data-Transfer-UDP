@@ -17,7 +17,6 @@ void error(char *msg)
 /* PACKET DEFINITION */
 //Total Packet Size = 1000 Bytes
 //Packet Header Size = 100 Bytes
-//Payload Size = 900 Bytes
 
 #define BADFILE -1
 #define FILEREQ 1
@@ -33,7 +32,7 @@ void error(char *msg)
 
 #define NAMESTART 12
 #define NAMESIZE 88
-#define LOADSIZE 60 //900
+#define LOADSIZE 100
 
 #define P_LOSS .10  //Probability of packet loss
 #define P_CORR .10  //Probability of packet corruption
@@ -77,7 +76,7 @@ void printPacket(struct Packet *packet)
   }
   else
   {
-    printf("****** UH OH! ****** Type is %d\n", packet->type);
+    printf("****** FATAL ERROR ****** Type is %d\n", packet->type);
   }
 
 }

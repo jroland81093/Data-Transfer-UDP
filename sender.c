@@ -8,14 +8,6 @@
 #include <utils.h>
 
 //Acts as the server.
-
-/*
-void sendWindow(int filefd, int sockfd, int lastAck, struct Packet *packet, const struct sockaddr *dest_addr, socklen_t addrlen);
-void sendWindowHelper(int sockfd, struct Packet window[], const struct sockaddr *dest_addr, socklen_t addrlen);
-int receiveWindow(struct Packet window[], int lastAcked);
-
-*/
-
 int receiveFileTransfer(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, struct Packet window[], char fileName[], int *filefd);
 void generateSendWindow(struct Packet window[], char fileName[], int filefd, int seqSize, int lastAcked);
 int receiveWindow(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, struct Packet window[]);
@@ -50,15 +42,6 @@ int main(int argc, char *argv[])
   sendAddr.sin_port = htons(portno);
   if (bind(sockfd, (struct sockaddr *) &sendAddr, sizeof(sendAddr)) <0) {
     error("Error on binding");
-  }
-
-  //Kill zombie processes (Only need if we are multitherading)
-  sa.sa_handler = sigchld_handler;
-  sigemptyset(&sa.sa_mask);
-  sa.sa_flags = SA_RESTART;
-  if (sigaction(SIGCHLD, &sa, NULL) == -1) {
-      perror("sigaction");
-      exit(1);
   }
 
   /* ALGORITHM START */
@@ -102,8 +85,6 @@ int main(int argc, char *argv[])
     }
     fclose(fdopen(filefd, "rb"));
   }
-  //recvfrom(sockfd, &packet, sizeof(packet), 0, (struct sockaddr *)&recvAddr, &addrlen
-  //sendto(sockfd, &packet, sizeof(packet), 0, (struct sockaddr *)&recvAddr, addrlen)
   return 0;
 }
 
@@ -123,7 +104,6 @@ int receiveFileTransfer(int sockfd, struct sockaddr *recv_addr, socklen_t addrle
 
     //Setup Local File I/O to determine size, etc.
     struct stat fileStat;
-    //DEBUG: If the file isn't there, we get a seg fault?
     FILE *fp = fopen(requestPacket.name, "rb");
     if (fp == NULL) {
       fprintf(stderr, "No such file or directory\n");
@@ -201,14 +181,4 @@ int receiveWindow(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, str
     }
   }
   return numAcks;
-/*
-  Used if we only want to print valid ACKs
-  int i=0;
-  while (window[i].type == ACK)
-  {
-    printReceivePacket(&window[i]);
-    i++;
-  }
-  return i;
-  */
 }

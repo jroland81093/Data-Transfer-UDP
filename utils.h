@@ -30,8 +30,8 @@ void error(char *msg)
 #define TIMEOUT 3 //3 Seconds to retry.
 #define WINDOWSIZE 3
 
-#define NAMESTART 12
-#define NAMESIZE 88
+#define NAMESTART 16
+#define NAMESIZE 84
 #define LOADSIZE 100
 
 #define P_LOSS .10  //Probability of packet loss
@@ -47,6 +47,9 @@ struct Packet {
 
   int seqNumber; 
   //Sequence number of ACK or Data. 0 = Newfile.
+
+  int fileSize;
+  //Total size of the file in bytes
 
   char name [NAMESIZE]; 
   //Name of file being requested or transmitted.
@@ -67,12 +70,26 @@ void printPacket(struct Packet *packet)
   }
   else if (packet->type == DATA || packet->type == CORRDATA)
   {
-    printf("[%s DATA %d/%d] \n", packet->name, packet->seqNumber, packet->seqSize);
+    if (packet->seqNumber == packet->seqSize)
+    {
+      printf("[%s DATA %d/%d] \n", packet->name, packet->fileSize, packet->fileSize);
+    }
+    else
+    {
+      printf("[%s DATA %d/%d] \n", packet->name, packet->seqNumber * LOADSIZE, packet->fileSize);
+    }
     printf("%s\n\n", packet->load);
   }
   else if (packet->type == ACK || packet->type == CORRACK)
   {
-    printf("[%s ACK %d/%d] \n\n", packet->name, packet->seqNumber, packet->seqSize);
+    if (packet->seqNumber == packet->seqSize)
+    {
+      printf("[%s ACK %d/%d] \n\n", packet->name, packet->fileSize, packet->fileSize);
+    }
+    else
+    {
+      printf("[%s ACK %d/%d] \n\n", packet->name, packet->seqNumber * LOADSIZE, packet->fileSize);
+    }
   }
   else
   {

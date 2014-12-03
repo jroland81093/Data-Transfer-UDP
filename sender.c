@@ -9,7 +9,7 @@
 
 //Acts as the server.
 int receiveFileTransfer(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, struct Packet window[], char fileName[], int *filefd);
-void generateSendWindow(struct Packet window[], char fileName[], int filefd, int seqSize, int lastAcked);
+void generateSendWindow(struct Packet window[], char fileName[], int filefd, int fileSize, int seqSize, int lastAcked);
 int receiveWindow(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, struct Packet window[]);
 
 void sigchld_handler(int s)
@@ -52,8 +52,8 @@ int main(int argc, char *argv[])
     struct Packet window[WINDOWSIZE];
     char fileName[NAMESIZE];
     int filefd;
-    int seqSize = receiveFileTransfer(sockfd, (struct sockaddr *) &recvAddr, addrlen, window, fileName, &filefd);
-
+    int fileSize = receiveFileTransfer(sockfd, (struct sockaddr *) &recvAddr, addrlen, window, fileName, &filefd);
+    int seqSize = ceiling(fileSize, LOADSIZE);
     if (seqSize < 0)
       //Tell the receiver that the file was not found.
     {
@@ -66,7 +66,7 @@ int main(int argc, char *argv[])
     while (1 && seqSize > 0)
     {
       int prevAck = lastAcked;
-      generateSendWindow(window, fileName, filefd, seqSize, lastAcked);
+      generateSendWindow(window, fileName, filefd, fileSize, seqSize, lastAcked);
       sendWindow(sockfd, (struct sockaddr *) &recvAddr, addrlen, window);
       lastAcked += receiveWindow(sockfd, (struct sockaddr *) &recvAddr, addrlen, window);
 
@@ -120,16 +120,17 @@ int receiveFileTransfer(int sockfd, struct sockaddr *recv_addr, socklen_t addrle
     for (i=0; i<WINDOWSIZE; i++)
     {
       window[i].seqSize = numSequences;
+      window[i].fileSize = fileStat.st_size;
       strCopy(window[i].name, requestPacket.name);
     }
 
     //fclose(fp);
     strCopy(fileName, requestPacket.name);
     *filefd = fd;
-    return numSequences;
+    return fileStat.st_size;
 }
 
-void generateSendWindow(struct Packet window[], char fileName[], int filefd, int seqSize, int lastAcked)
+void generateSendWindow(struct Packet window[], char fileName[], int filefd, int fileSize, int seqSize, int lastAcked)
 //Sends the next window of files to the receiver.
 {
   int i;
@@ -153,6 +154,7 @@ void generateSendWindow(struct Packet window[], char fileName[], int filefd, int
     {
       window[i].type = DATA;
       window[i].seqSize = seqSize;
+      window[i].fileSize = fileSize;
       window[i].seqNumber = seqNum;
       strCopy(window[i].name, fileName);
       memcpy((void *)window[i].load, (void *) buff, LOADSIZE);
@@ -170,12 +172,12 @@ int receiveWindow(int sockfd, struct sockaddr *recv_addr, socklen_t addrlen, str
   int numAcks = 0;
   for (i=0; i<WINDOWSIZE; i++)
   {
-    if (window[i].type == ACK)
+    if (window[i].type == ACK && window[i].seqNumber > 0)
     {
       printReceivePacket(&window[i]);
       numAcks++;
     }
-    else if (window[i].type == CORRACK)
+    else if (window[i].type == CORRACK && window[i].seqNumber > 0)
     {
       printReceivePacket(&window[i]);
     }

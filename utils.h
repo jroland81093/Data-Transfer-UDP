@@ -32,7 +32,7 @@ void error(char *msg)
 
 #define NAMESTART 16
 #define NAMESIZE 84
-#define LOADSIZE 100
+#define LOADSIZE 1000
 
 #define P_LOSS .10  //Probability of packet loss
 #define P_CORR .10  //Probability of packet corruption
@@ -54,7 +54,7 @@ struct Packet {
   char name [NAMESIZE]; 
   //Name of file being requested or transmitted.
 
-  char load [LOADSIZE];
+  unsigned char load [LOADSIZE];
 };
 
 /* END PACKET DEFINITION */

@@ -46,45 +46,41 @@ int main(int argc, char *argv[])
 
   /* ALGORITHM START */
   
-  //Infinite loop after the server is bound to keep it running for multiple requests.
-  while (1)
+  struct Packet window[WINDOWSIZE];
+  char fileName[NAMESIZE];
+  int filefd;
+  int fileSize = receiveFileTransfer(sockfd, (struct sockaddr *) &recvAddr, addrlen, window, fileName, &filefd);
+  int seqSize = ceiling(fileSize, LOADSIZE);
+  if (seqSize < 0)
+    //Tell the receiver that the file was not found.
   {
-    struct Packet window[WINDOWSIZE];
-    char fileName[NAMESIZE];
-    int filefd;
-    int fileSize = receiveFileTransfer(sockfd, (struct sockaddr *) &recvAddr, addrlen, window, fileName, &filefd);
-    int seqSize = ceiling(fileSize, LOADSIZE);
-    if (seqSize < 0)
-      //Tell the receiver that the file was not found.
-    {
-      window[0].type = BADFILE;
-      sendto(sockfd, (void *)window , sizeof(window[0]), 0, (struct sockaddr *) &recvAddr, addrlen);
-    }
-
-    int lastAcked = 0;
-    //Loop until we receive the final ACK
-    while (1 && seqSize > 0)
-    {
-      int prevAck = lastAcked;
-      generateSendWindow(window, fileName, filefd, fileSize, seqSize, lastAcked);
-      sendWindow(sockfd, (struct sockaddr *) &recvAddr, addrlen, window);
-      lastAcked += receiveWindow(sockfd, (struct sockaddr *) &recvAddr, addrlen, window);
-
-      if (lastAcked == seqSize)
-      {
-        fprintf(stderr, "RDT for %s is complete.\nWaiting for next file request...\n", fileName);
-        fprintf(stderr, "--------\n\n");
-        break;
-      }
-      else if (lastAcked == prevAck)
-      //Timeout and resend packets.
-      {
-        sleep(TIMEOUT);
-        fprintf(stderr, "TIMEOUT! Retrying now...\n\n");
-      }
-    }
-    fclose(fdopen(filefd, "rb"));
+    window[0].type = BADFILE;
+    sendto(sockfd, (void *)window , sizeof(window[0]), 0, (struct sockaddr *) &recvAddr, addrlen);
   }
+
+  int lastAcked = 0;
+  //Loop until we receive the final ACK
+  while (1 && seqSize > 0)
+  {
+    int prevAck = lastAcked;
+    generateSendWindow(window, fileName, filefd, fileSize, seqSize, lastAcked);
+    sendWindow(sockfd, (struct sockaddr *) &recvAddr, addrlen, window);
+    lastAcked += receiveWindow(sockfd, (struct sockaddr *) &recvAddr, addrlen, window);
+
+    if (lastAcked == seqSize)
+    {
+      fprintf(stderr, "--------\n\n");
+      break;
+    }
+    else if (lastAcked == prevAck)
+    //Timeout and resend packets.
+    {
+      sleep(TIMEOUT);
+      fprintf(stderr, "TIMEOUT! Retrying now...\n\n");
+    }
+  }
+  fclose(fdopen(filefd, "rb"));
+
   return 0;
 }
 
@@ -134,12 +130,12 @@ void generateSendWindow(struct Packet window[], char fileName[], int filefd, int
 //Sends the next window of files to the receiver.
 {
   int i;
-  char buff[LOADSIZE];
+  unsigned char buff[LOADSIZE];
   bzero((char *)window, sizeof(window[0]) * WINDOWSIZE);
 
   for (i=0; i<WINDOWSIZE; i++)
   {
-    bzero(buff, LOADSIZE);
+    bzero((char *) buff, LOADSIZE);
     int seqNum = lastAcked+i+1;
     if (seqNum > seqSize)
     //End of file

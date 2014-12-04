@@ -130,7 +130,7 @@ void generateSendWindow(struct Packet window[], char fileName[], int filefd, int
 //Sends the next window of files to the receiver.
 {
   int i;
-  unsigned char buff[LOADSIZE];
+  char buff[LOADSIZE];
   bzero((char *)window, sizeof(window[0]) * WINDOWSIZE);
 
   for (i=0; i<WINDOWSIZE; i++)

@@ -139,11 +139,6 @@ void writeToFileSystem(int fd, struct Packet packet)
     if (packet.seqNumber == packet.seqSize)
     {
         int size = packet.fileSize % LOADSIZE;
-
-        printf("*****Final packet's load size is %d*****\n", size);
-        printf("*****Final character is %x*****\n", packet.load[size-1]);
-        printf("*****Next character is %x*****\n", packet.load[size+1]);
-
         pwrite(fd, (void *) packet.load, size, (packet.seqNumber - 1 ) * LOADSIZE);
     }
     else
